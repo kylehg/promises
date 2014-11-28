@@ -19,7 +19,7 @@ var State = {
 function Promise(executor) {
   /**
    * The promise, exposed for A+ compliance
-   * @type {Promise}
+   * @type {!Promise}
    */
   this.promise = this
 
@@ -142,60 +142,61 @@ Promise.prototype.reject = function (reason) {
  * @template R
  */
 Promise.prototype.then = function (onFulfilled, onRejected) {
-  return new Promise(function executor(resolve, reject) {
+  var promise = new Promise()
 
-    // Wrap a .then handler in a function that calls it and resolves the new
-    // promise with its result (or rejects it with the error as the reason)
-    function makeWrapper(onComplete) {
-      return function onCompleteWrapper(value) {
-        try {
-          var result = onComplete(value)
-        } catch (err) {
-          reject(err)
-          return
-        }
-        resolve(result)
+  // Wrap a .then handler in a function that calls it and resolves the new
+  // promise with its result (or rejects it with the error as the reason)
+  function makeWrapper(onComplete) {
+    return function onCompleteWrapper(value) {
+      try {
+        var result = onComplete(value)
+      } catch (err) {
+        promise.reject(err)
+        return
       }
+      promise.resolve(result)
     }
+  }
 
-    if (typeof onFulfilled == 'function') {
-      var onFulfilledWrapper = makeWrapper(onFulfilled)
+  if (typeof onFulfilled == 'function') {
+    var onFulfilledWrapper = makeWrapper(onFulfilled)
 
-      // If the promise is pending, add onFulfilled to the success callbacks
-      if (this._state == State.PENDING) {
-        this._onFulfilleds.push(onFulfilledWrapper)
+    // If the promise is pending, add onFulfilled to the success callbacks
+    if (this._state == State.PENDING) {
+      this._onFulfilleds.push(onFulfilledWrapper)
 
-      // If the promise is already fulfilled, call the success callback
-      // immediately with the value
-      } else if (this._state == State.FULFILLED) {
-        onFulfilledWrapper(this._getValue())
-      }
-
-    // If the onFulfilled handler isn't a function but the promise is already
-    // fulfilled, resolve the new promise with the current promise's value
+    // If the promise is already fulfilled, call the success callback
+    // immediately with the value
     } else if (this._state == State.FULFILLED) {
-      resolve(this._getValue())
+      onFulfilledWrapper(this._getValue())
     }
 
-    if (typeof onRejected == 'function') {
-      var onRejectedWrapper = makeWrapper(onRejected)
+  // If the onFulfilled handler isn't a function but the promise is already
+  // fulfilled, resolve the new promise with the current promise's value
+  } else if (this._state == State.FULFILLED) {
+    promise.resolve(this._getValue())
+  }
 
-      // If the promise is pending, add onRejected to the reject callbacks
-      if (this._state == State.PENDING) {
-        this._onRejecteds.push(onRejectedWrapper)
+  if (typeof onRejected == 'function') {
+    var onRejectedWrapper = makeWrapper(onRejected)
 
-      // If the promise is already rejected, call the rejection callback
-      // immediately with the reason
-      } else if (this._state == State.REJECTED) {
-        onRejectedWrapper(this._getReason())
-      }
+    // If the promise is pending, add onRejected to the reject callbacks
+    if (this._state == State.PENDING) {
+      this._onRejecteds.push(onRejectedWrapper)
 
-    // If the onRejected handler isn't a function but the promise is already
-    // rejected, resolve the new promise with the current promise's value
+    // If the promise is already rejected, call the rejection callback
+    // immediately with the reason
     } else if (this._state == State.REJECTED) {
-      reject(this._getReason())
+      onRejectedWrapper(this._getReason())
     }
-  })
+
+  // If the onRejected handler isn't a function but the promise is already
+  // rejected, resolve the new promise with the current promise's value
+  } else if (this._state == State.REJECTED) {
+    promise.reject(this._getReason())
+  }
+
+  return promise
 }
 
 /**
@@ -366,23 +367,27 @@ Promise.race = function (iterable) {
 }
 
 /**
- * Return a promise rejected with the given reason
- * @param {!Error} reason
- * @return {!Promise}
- * @static
- */
-Promise.reject = function (reason) {
-  return new Promise().reject(reason)
-}
-
-/**
  * Return a promise resolved to the given value
  * @param {T} value
  * @return {!Promise.<T>}
  * @static
  */
 Promise.resolve = function (value) {
-  return new Promise().resolve(value)
+  var promise = new Promise()
+  promise.resolve(value)
+  return promise
+}
+
+/**
+ * Return a promise rejected with the given reason
+ * @param {!Error} reason
+ * @return {!Promise}
+ * @static
+ */
+Promise.reject = function (reason) {
+  var promise = new Promise()
+  promise.reject(reason)
+  return promise
 }
 
 module.exports = Promise
