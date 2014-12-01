@@ -97,7 +97,6 @@ Promise.prototype.resolve = function (value) {
     // resolvePromise, and second argument rejectPromise
     if (typeof then == 'function') {
       try {
-        console.log('&&&', then)
         then.call(value, this.resolve.bind(this), this.reject.bind(this))
       } catch (err) {
         // If calling then throws an exception e, reject promise with e as
