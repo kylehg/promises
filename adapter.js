@@ -1,14 +1,9 @@
 var Promise = require('./promise')
 
-exports.resolved = function (value) {
-  return Promise.resolve(value)
-}
+exports.resolved = Promise.resolve
 
-exports.rejected = function (reason) {
-  return Promise.reject(reason)
-}
+exports.rejected = Promise.reject
 
 exports.deferred = function () {
-  var promise = new Promise()
-  return promise
+  return new Promise()
 }

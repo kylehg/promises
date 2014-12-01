@@ -67,21 +67,20 @@ function Promise(executor) {
  * @param {*} value
  */
 Promise.prototype.resolve = function (value) {
+
   if (this._state != State.PENDING) {
-    return
+    return this
   }
 
   // If promise and x refer to the same object, reject promise with a
   // TypeError as the reason
   if (value == this) {
-    this.reject(new TypeError('Cannot resolve a promise with itself'))
-    return
+    return this.reject(new TypeError('Cannot resolve a promise with itself'))
   }
 
   // If x is a promise, adopt its state
   if (value instanceof Promise) {
-    this._adopt(value)
-    return
+    return this._adopt(value)
   }
 
   // Otherwise, if x is an object or function
@@ -92,8 +91,7 @@ Promise.prototype.resolve = function (value) {
     } catch (err) {
       // If retrieving the property x.then results in a thrown exception e,
       // reject promise with e as the reason
-      this.reject(err)
-      return
+      return this.reject(err)
     }
 
     // If then is a function, call it with x as this, first argument
@@ -106,8 +104,8 @@ Promise.prototype.resolve = function (value) {
         // the reason
         this.reject(err)
       }
+      return this
     }
-    return
   }
 
   // If then is not a function, or if x is not an object or function,
@@ -115,6 +113,8 @@ Promise.prototype.resolve = function (value) {
   this._state = State.FULFILLED
   this._setValue(value)
   this._callSuccessFunctions(value)
+
+  return this
 }
 
 /**
@@ -124,12 +124,14 @@ Promise.prototype.resolve = function (value) {
  */
 Promise.prototype.reject = function (reason) {
   if (this._state != State.PENDING) {
-    return
+    return this
   }
 
   this._state = State.REJECTED
   this._setReason(reason)
   this._callFailureFunctions(reason)
+
+  return this
 }
 
 /**
@@ -168,7 +170,7 @@ Promise.prototype.then = function (onFulfilled, onRejected) {
     // If the promise is already fulfilled, call the success callback
     // immediately with the value
     } else if (this._state == State.FULFILLED) {
-      onFulfilledWrapper(this._getValue())
+      executeHandler(onFulfilledWrapper, this._getValue())
     }
 
   // If the onFulfilled handler isn't a function but the promise is already
@@ -187,7 +189,7 @@ Promise.prototype.then = function (onFulfilled, onRejected) {
     // If the promise is already rejected, call the rejection callback
     // immediately with the reason
     } else if (this._state == State.REJECTED) {
-      onRejectedWrapper(this._getReason())
+      executeHandler(onRejectedWrapper, this._getReason())
     }
 
   // If the onRejected handler isn't a function but the promise is already
@@ -283,7 +285,7 @@ Promise.prototype._getReason = function () {
     throw new Error('Cannot get promise rejection reason that has not been set')
   }
 
-  this._reasonContainer.REASON
+  return this._reasonContainer.REASON
 }
 
 /**
@@ -293,7 +295,7 @@ Promise.prototype._getReason = function () {
  */
 Promise.prototype._callSuccessFunctions = function (value) {
   this._onFulfilleds.forEach(function (onFulfilled) {
-    onFulfilled(value)
+    executeHandler(onFulfilled, value)
   })
 }
 
@@ -304,65 +306,7 @@ Promise.prototype._callSuccessFunctions = function (value) {
  */
 Promise.prototype._callFailureFunctions = function (reason) {
   this._onRejecteds.forEach(function (onRejected) {
-    onRejected(reason)
-  })
-}
-
-/**
- * Given an array of promises, resolve them all into a single promise of the
- * array of resulting values.
- * @param {!Array.<!Promise>} iterable
- * @return {!Promise.<Array>}
- * @static
- */
-Promise.all = function (iterable) {
-  return new Promise(function (resolve, reject) {
-    var promisesLeft = iterable.length
-    var resultArr = new Array(promisesLeft)
-
-    iterable.forEach(function (promise, i) {
-      promise.then(function (value) {
-        resultArr[i] = value
-        promisesLeft--
-
-        if (promisesLeft == 0) {
-          resolve(resultArr)
-        }
-      }, function (reason) {
-        reject(reason)
-      })
-    })
-  })
-}
-
-/**
- * Given an array of promises, return a promise resolved with the first value
- * to reserve.
- * @param {!Array.<!Promise>} iterable
- * @return {!Promise}
- * @static
- */
-Promise.race = function (iterable) {
-  return new Promise(function (resolve, reject) {
-    var finished = false
-
-    iterable.forEach(function (promise) {
-      promise.then(function (value) {
-        if (finished) {
-          return
-        }
-
-        finished = true
-        resolve(value)
-      }, function (reason) {
-        if (finished) {
-          return
-        }
-
-        finished = true
-        reject(reason)
-      })
-    })
+    executeHandler(onRejected, reason)
   })
 }
 
@@ -388,6 +332,71 @@ Promise.reject = function (reason) {
   var promise = new Promise()
   promise.reject(reason)
   return promise
+}
+
+/**
+ * Given an array of promises, resolve them all into a single promise of the
+ * array of resulting values.
+ * @param {!Array.<!Promise>} iterable
+ * @return {!Promise.<Array>}
+ * @static
+ */
+Promise.all = function (iterable) {
+  var result = new Promise()
+  var promisesLeft = iterable.length
+  var resultArr = new Array(promisesLeft)
+
+  iterable.forEach(function (promise, i) {
+    promise.then(function (value) {
+      resultArr[i] = value
+      promisesLeft--
+
+      if (promisesLeft == 0) {
+        result.resolve(resultArr)
+      }
+    }, function (reason) {
+      result.reject(reason)
+    })
+  })
+
+  return result
+}
+
+/**
+ * Given an array of promises, return a promise resolved with the first value
+ * to reserve.
+ * @param {!Array.<!Promise>} iterable
+ * @return {!Promise}
+ * @static
+ */
+Promise.race = function (iterable) {
+  var winner = new Promise()
+  var finished = false
+
+  iterable.forEach(function (promise) {
+    promise.then(function (value) {
+      if (finished) return
+
+      finished = true
+      winner.resolve(value)
+    }, function (reason) {
+      if (finished) return
+
+      finished = true
+      winner.reject(reason)
+    })
+  })
+
+  return winner
+}
+
+function executeHandler(fn, arg) {
+  var boundFn = fn.bind(null, arg)
+  if (process && typeof process.nextTick == 'function') {
+    process.nextTick(boundFn)
+  } else {
+    setTimeout(boundFn, 0)
+  }
 }
 
 module.exports = Promise
