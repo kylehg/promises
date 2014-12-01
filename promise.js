@@ -67,7 +67,6 @@ function Promise(executor) {
  * @param {*} value
  */
 Promise.prototype.resolve = function (value) {
-
   if (this._state != State.PENDING) {
     return this
   }
@@ -98,6 +97,7 @@ Promise.prototype.resolve = function (value) {
     // resolvePromise, and second argument rejectPromise
     if (typeof then == 'function') {
       try {
+        console.log('&&&', then)
         then.call(value, this.resolve.bind(this), this.reject.bind(this))
       } catch (err) {
         // If calling then throws an exception e, reject promise with e as
@@ -144,61 +144,58 @@ Promise.prototype.reject = function (reason) {
  * @template R
  */
 Promise.prototype.then = function (onFulfilled, onRejected) {
-  var promise = new Promise()
+  var newPromise = new Promise()
+  var oldPromise = this
 
-  // Wrap a .then handler in a function that calls it and resolves the new
-  // promise with its result (or rejects it with the error as the reason)
-  function makeWrapper(onComplete) {
-    return function onCompleteWrapper(value) {
+  var onFulfilledWrapper = function onFulfilledWrapper(value) {
+    if (typeof onFulfilled == 'function') {
       try {
-        var result = onComplete(value)
+        var result = onFulfilled(value)
       } catch (err) {
-        promise.reject(err)
+        newPromise.reject(err)
         return
       }
-      promise.resolve(result)
+      newPromise.resolve(result)
+    } else {
+      newPromise.resolve(oldPromise._getValue())
     }
   }
 
-  if (typeof onFulfilled == 'function') {
-    var onFulfilledWrapper = makeWrapper(onFulfilled)
+  // If the promise is pending, add onFulfilled to the success callbacks
+  if (this._state == State.PENDING) {
+    this._onFulfilleds.push(onFulfilledWrapper)
 
-    // If the promise is pending, add onFulfilled to the success callbacks
-    if (this._state == State.PENDING) {
-      this._onFulfilleds.push(onFulfilledWrapper)
-
-    // If the promise is already fulfilled, call the success callback
-    // immediately with the value
-    } else if (this._state == State.FULFILLED) {
-      executeHandler(onFulfilledWrapper, this._getValue())
-    }
-
-  // If the onFulfilled handler isn't a function but the promise is already
-  // fulfilled, resolve the new promise with the current promise's value
+  // If the promise is already fulfilled, call the success callback
+  // immediately with the value
   } else if (this._state == State.FULFILLED) {
-    promise.resolve(this._getValue())
+    executeHandler(onFulfilledWrapper, this._getValue())
   }
 
-  if (typeof onRejected == 'function') {
-    var onRejectedWrapper = makeWrapper(onRejected)
-
-    // If the promise is pending, add onRejected to the reject callbacks
-    if (this._state == State.PENDING) {
-      this._onRejecteds.push(onRejectedWrapper)
-
-    // If the promise is already rejected, call the rejection callback
-    // immediately with the reason
-    } else if (this._state == State.REJECTED) {
-      executeHandler(onRejectedWrapper, this._getReason())
+  var onRejectedWrapper = function onRejectedWrapper(reason) {
+    if (typeof onRejected == 'function') {
+      try {
+        var result = onRejected(reason)
+      } catch (err) {
+        newPromise.reject(err)
+        return
+      }
+      newPromise.resolve(result)
+    } else {
+      newPromise.reject(reason)
     }
-
-  // If the onRejected handler isn't a function but the promise is already
-  // rejected, resolve the new promise with the current promise's value
-  } else if (this._state == State.REJECTED) {
-    promise.reject(this._getReason())
   }
 
-  return promise
+  // If the promise is pending, add onRejected to the reject callbacks
+  if (this._state == State.PENDING) {
+    this._onRejecteds.push(onRejectedWrapper)
+
+  // If the promise is already rejected, call the rejection callback
+  // immediately with the reason
+  } else if (this._state == State.REJECTED) {
+    executeHandler(onRejectedWrapper, this._getReason())
+  }
+
+  return newPromise
 }
 
 /**
@@ -207,7 +204,7 @@ Promise.prototype.then = function (onFulfilled, onRejected) {
  * @param {?function(this:void, !Error):R} onRejected
  * @return {!Promise.<R>} A new promsie resolved to the return value of the
  *   called handler.
- * @tempalte R
+ * @template R
  */
 Promise.prototype.catch = function (onRejected) {
   return this.then(null, onRejected)
@@ -392,11 +389,7 @@ Promise.race = function (iterable) {
 
 function executeHandler(fn, arg) {
   var boundFn = fn.bind(null, arg)
-  if (process && typeof process.nextTick == 'function') {
-    process.nextTick(boundFn)
-  } else {
-    setTimeout(boundFn, 0)
-  }
+  setTimeout(boundFn, 0)
 }
 
 module.exports = Promise
