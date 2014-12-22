@@ -57,6 +57,8 @@ function Promise(executor) {
   if (typeof executor == 'function') {
     this._execute(executor)
   }
+
+  // TODO(seal object)
 }
 
 
@@ -67,6 +69,7 @@ function Promise(executor) {
  * @param {*} value
  */
 Promise.prototype.resolve = function (value) {
+  this.name && console.log('Resolving with', value, this)
   if (this._state != State.PENDING) {
     return this
   }

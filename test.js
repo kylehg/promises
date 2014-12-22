@@ -12,28 +12,28 @@ var sentinel = { sentinel: 'sentinel' } // a sentinel fulfillment value to test 
 var other = { other: 'other' } // a value we don't want to be strict equal to
 var sentinelArray = [sentinel] // a sentinel fulfillment value to test when we need an array
 
-function xFactory() {
-  var d = deferred()
-  setTimeout(function () {
-    d.resolve(sentinel)
-  }, 50)
-
-  return {
-    then: function (resolvePromise) {
-      resolvePromise(d.promise)
-      throw other
-    }
-  }
-}
-
 function test() {
   var promise = resolved(dummy).then(function onBasePromiseFulfilled() {
-    return xFactory()
+    var d = deferred()
+    d.name = 'd'
+    setTimeout(function () {
+      console.log('Resolving delayed promise')
+      d.resolve(sentinel)
+    }, 50)
+
+    return {
+      name: 'fake thennable',
+      then: function (resolvePromise) {
+        console.log('Calling fake thennable')
+        resolvePromise(d.promise)
+        throw other
+      }
+    }
   })
 
   promise.then(function (value) {
-    assert.strictEqual(reason, sentinel)
-    console.log('Success')
+    assert.strictEqual(value, sentinel)
+    console.log('SUCCESS')
     process.exit(0)
   })
 }
@@ -43,6 +43,6 @@ function test() {
 test()
 
 setTimeout(function () {
-  console.log('Timed out')
+  console.log('TIMED OUT')
   process.exit(1)
-})
+}, 1000)
