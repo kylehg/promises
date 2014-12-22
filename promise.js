@@ -83,7 +83,8 @@ Promise.prototype.resolve = function (value) {
   }
 
   // Otherwise, if x is an object or function
-  if (typeof value == 'function' || typeof value == 'object') {
+  if ((typeof value == 'object' && value != null) ||
+      typeof value == 'function') {
     try {
       // Let then be x.then
       var then = value.then
