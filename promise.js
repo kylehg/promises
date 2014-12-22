@@ -279,7 +279,8 @@ Promise.prototype._setReason = function (reason) {
  */
 Promise.prototype._getReason = function () {
   if (this._reasonContainer == null) {
-    throw new Error('Cannot get promise rejection reason that has not been set')
+    throw new Error('Cannot get promise rejection reason that has not ' +
+                    'been set')
   }
 
   return this._reasonContainer.REASON
